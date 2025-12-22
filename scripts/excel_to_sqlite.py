@@ -20,7 +20,13 @@ df.columns = (
     .str.replace(" ", "_")
     .str.replace("%", "th")
 )
-
+# Normalize description column
+if "full_description" in df.columns:
+    df = df.rename(columns={"full_description": "description"})
+elif "procedure_description" in df.columns:
+    df = df.rename(columns={"procedure_description": "description"})
+elif "description" not in df.columns:
+    raise ValueError("No recognizable description column found in Excel")
 # -----------------------
 # Normalize procedure code as TEXT
 # -----------------------
