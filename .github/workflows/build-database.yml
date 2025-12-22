@@ -1,6 +1,7 @@
 name: Build SQLite Database
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "data/source/**.xlsx"
