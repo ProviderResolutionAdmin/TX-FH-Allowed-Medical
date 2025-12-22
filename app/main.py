@@ -45,57 +45,54 @@ def lookup(
     conn = get_connection()
 
     try:
-        # 1. Exact match if modifier provided
+        # Case 1: Modifier provided — try modifier-specific row
         if modifier is not None:
-            exact_query = """
-            SELECT *
-            FROM allowed_amounts
-            WHERE geozip = ?
-              AND code = ?
-              AND modifier = ?
-            """
             row = conn.execute(
-                exact_query, (geozip, code, modifier)
+                """
+                SELECT *
+                FROM allowed_amounts
+                WHERE geozip = ?
+                  AND code = ?
+                  AND modifier = ?
+                """,
+                (geozip, code, modifier)
             ).fetchone()
 
             if row:
                 result = dict(row)
-                result["match_type"] = "Exact match on modifier"
+                result["match_type"] = "Modifier-specific rate"
                 return result
 
-        # 2. Fallback to no-modifier row
-        fallback_query = """
-        SELECT *
-        FROM allowed_amounts
-        WHERE geozip = ?
-          AND code = ?
-          AND modifier IS NULL
-        """
+        # Case 2: Base rate (no modifier) — this is the NORMAL path
         row = conn.execute(
-            fallback_query, (geozip, code)
+            """
+            SELECT *
+            FROM allowed_amounts
+            WHERE geozip = ?
+              AND code = ?
+              AND modifier IS NULL
+            """,
+            (geozip, code)
         ).fetchone()
 
         if row:
             result = dict(row)
             result["match_type"] = (
-                "Fallback match (no modifier on file)"
-                if modifier is not None
-                else "Base match (no modifier)"
+                "Base rate (no modifier)"
+                if modifier is None
+                else "Base rate (modifier not on file)"
             )
             return result
 
-        # 3. No match found
+        # Case 3: Nothing found
         raise HTTPException(
             status_code=404,
             detail=(
-                f"No allowed amount found for GeoZip {geozip}, "
-                f"Code {code}"
-                + (f", Modifier {modifier}" if modifier else "")
+                f"No allowed amount found for GeoZip {geozip} "
+                f"and Procedure Code {code}"
+                + (f" with Modifier {modifier}" if modifier else "")
             )
         )
 
     finally:
         conn.close()
-
-
-
