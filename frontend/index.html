@@ -73,6 +73,10 @@
       font-style: italic;
       color: #444;
     }
+
+    .code-cell {
+      font-family: monospace;
+    }
   </style>
 </head>
 
@@ -121,6 +125,7 @@
   <table id="results" style="display:none;">
     <thead>
       <tr>
+        <th>Procedure Code</th>
         <th>Description</th>
         <th>Match Type</th>
         <th>50th</th>
@@ -189,6 +194,7 @@
       results.forEach(data => {
         const row = document.createElement("tr");
         row.innerHTML = `
+          <td class="code-cell">${data.code || ""}</td>
           <td>${data.description || ""}</td>
           <td class="match-type">${data.match_type || ""}</td>
           <td>${data["50th"] || ""}</td>
@@ -227,16 +233,10 @@
     });
 
     navigator.clipboard.writeText(text)
-      .then(() => {
-        alert("Results copied to clipboard.");
-      })
-      .catch(() => {
-        alert("Unable to copy results.");
-      });
+      .then(() => alert("Results copied to clipboard."))
+      .catch(() => alert("Unable to copy results."));
   }
 </script>
 
 </body>
 </html>
-
-
