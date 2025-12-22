@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse
 from pathlib import Path
 import sqlite3
 from datetime import datetime
+from typing import List
 
 app = FastAPI(title="TX FH Allowed Medical Lookup")
 
@@ -78,72 +79,84 @@ def serve_ui():
 # -----------------------
 # Lookup API (corrected + hardened)
 # -----------------------
+from typing import List
+
 @app.get("/lookup")
 def lookup(
-    geozip: int = Query(..., description="Geographic ZIP"),
-    code: str = Query(..., description="Procedure code"),
+    geozip: int = Query(...),
+    code: List[str] = Query(..., description="One or more procedure codes"),
     modifier: str | None = Query(default=None)
 ):
     conn = get_connection()
     ensure_log_table(conn)
 
-    # Normalize inputs
-    code = code.strip()
     modifier = modifier.strip() if modifier else None
+    results = []
 
     try:
-        # 1. Modifier-specific lookup (only if modifier entered)
-        if modifier:
-            row = conn.execute(
-                """
-                SELECT *
-                FROM allowed_amounts
-                WHERE geozip = ?
-                  AND code = ?
-                  AND modifier = ?
-                """,
-                (geozip, code, modifier)
-            ).fetchone()
+        for c in code:
+            c = c.strip()
+            row = None
+            match_type = None
+
+            # 1. Modifier-specific lookup
+            if modifier:
+                row = conn.execute(
+                    """
+                    SELECT *
+                    FROM allowed_amounts
+                    WHERE geozip = ?
+                      AND code = ?
+                      AND modifier = ?
+                    """,
+                    (geozip, c, modifier)
+                ).fetchone()
+
+                if row:
+                    match_type = "Modifier-specific rate"
+
+            # 2. Base rate lookup
+            if not row:
+                row = conn.execute(
+                    """
+                    SELECT *
+                    FROM allowed_amounts
+                    WHERE geozip = ?
+                      AND code = ?
+                      AND (modifier IS NULL OR modifier = '')
+                    """,
+                    (geozip, c)
+                ).fetchone()
+
+                if row:
+                    match_type = (
+                        "Base rate (no modifier)"
+                        if not modifier
+                        else "Base rate (modifier not on file)"
+                    )
 
             if row:
                 result = dict(row)
-                result["match_type"] = "Modifier-specific rate"
-                log_lookup(conn, geozip, code, modifier, result["match_type"], 1)
-                return result
+                result["match_type"] = match_type
+                results.append(result)
+                log_lookup(conn, geozip, c, modifier, match_type, 1)
+            else:
+                # Return a visible "no match" row for this code
+                results.append({
+                    "description": f"No match found for code {c}",
+                    "match_type": "No match",
+                    "50th": "",
+                    "60th": "",
+                    "70th": "",
+                    "75th": "",
+                    "80th": "",
+                    "85th": "",
+                    "90th": "",
+                    "95th": ""
+                })
+                log_lookup(conn, geozip, c, modifier, "No match found", 0)
 
-        # 2. Base rate (normal path — no modifier)
-        row = conn.execute(
-            """
-            SELECT *
-            FROM allowed_amounts
-            WHERE geozip = ?
-              AND code = ?
-              AND (modifier IS NULL OR modifier = '')
-            """,
-            (geozip, code)
-        ).fetchone()
-
-        if row:
-            match_type = (
-                "Base rate (no modifier)"
-                if modifier is None
-                else "Base rate (modifier not on file)"
-            )
-            result = dict(row)
-            result["match_type"] = match_type
-            log_lookup(conn, geozip, code, modifier, match_type, 1)
-            return result
-
-        # 3. No match found
-        log_lookup(conn, geozip, code, modifier, "No match found", 0)
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                f"No allowed amount found for GeoZip {geozip} "
-                f"and Procedure Code {code}"
-                + (f" with Modifier {modifier}" if modifier else "")
-            )
-        )
+        return results  # <-- ALWAYS a list
 
     finally:
         conn.close()
