@@ -3,30 +3,48 @@
 <head>
   <meta charset="UTF-8" />
   <title>TX Allowed Medical Lookup</title>
+
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 40px;
-      max-width: 800px;
+      margin: 40px auto;
+      max-width: 900px;
+      color: #222;
+    }
+
+    h2 {
+      margin-bottom: 10px;
+    }
+
+    .subtext {
+      color: #555;
+      margin-bottom: 25px;
     }
 
     label {
       display: block;
-      margin-top: 15px;
+      margin-top: 16px;
       font-weight: bold;
     }
 
     input {
-      width: 300px;
-      padding: 6px;
+      width: 320px;
+      padding: 7px;
       font-size: 14px;
+      margin-top: 4px;
     }
 
     button {
-      margin-top: 20px;
-      padding: 10px 20px;
+      margin-top: 24px;
+      padding: 10px 24px;
       font-size: 14px;
       cursor: pointer;
+    }
+
+    .error {
+      margin-top: 20px;
+      color: #b00020;
+      font-weight: bold;
     }
 
     table {
@@ -39,42 +57,52 @@
       border: 1px solid #ccc;
       padding: 8px;
       text-align: left;
+      font-size: 14px;
     }
 
     th {
       background-color: #f4f4f4;
+      font-weight: bold;
     }
 
-    .error {
-      margin-top: 20px;
-      color: red;
-      font-weight: bold;
+    .match-type {
+      font-style: italic;
+      color: #444;
     }
   </style>
 </head>
+
 <body>
 
   <h2>TX Fully-Insured Allowed Medical Lookup</h2>
+  <div class="subtext">
+    Enter GeoZip and Procedure Code. Modifier is optional and rarely required.
+  </div>
 
-  <label>GeoZip</label>
-  <input id="geozip" type="number" />
+  <!-- Lookup Form -->
+  <form id="lookupForm">
 
-  <label>Procedure Code</label>
-  <input id="code" type="number" />
+    <label for="geozip">GeoZip</label>
+    <input id="geozip" type="number" required />
 
-  <label>Modifier (Utilize when necessary)</label>
-  <input id="modifier" type="number" />
+    <label for="code">Procedure Code</label>
+    <input id="code" type="text" required />
 
-  <br />
-  <button onclick="lookup()">Lookup</button>
+    <label for="modifier">Modifier (optional — leave blank for most cases)</label>
+    <input id="modifier" type="text" />
 
+    <button type="submit">Lookup</button>
+  </form>
+
+  <!-- Error Message -->
   <div id="error" class="error"></div>
 
+  <!-- Results Table -->
   <table id="results" style="display:none;">
     <thead>
       <tr>
         <th>Description</th>
-<th>Match Type</th>
+        <th>Match Type</th>
         <th>50th</th>
         <th>60th</th>
         <th>70th</th>
@@ -91,55 +119,64 @@
   </table>
 
 <script>
-async function lookup() {
-  document.getElementById("error").textContent = "";
-  document.getElementById("results").style.display = "none";
+  // Allow Enter key to trigger lookup
+  document.getElementById("lookupForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    lookup();
+  });
 
-  const geozip = document.getElementById("geozip").value;
-  const code = document.getElementById("code").value;
-  const modifier = document.getElementById("modifier").value;
+  async function lookup() {
+    const errorDiv = document.getElementById("error");
+    const resultsTable = document.getElementById("results");
 
-  if (!geozip || !code) {
-    document.getElementById("error").textContent =
-      "GeoZip and Procedure Code are required.";
-    return;
-  }
+    errorDiv.textContent = "";
+    resultsTable.style.display = "none";
 
-  let url = `/lookup?geozip=${geozip}&code=${code}`;
-  if (modifier) {
-    url += `&modifier=${modifier}`;
-  }
+    const geozip = document.getElementById("geozip").value.trim();
+    const code = document.getElementById("code").value.trim();
+    const modifier = document.getElementById("modifier").value.trim();
 
-  try {
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error("No matching record found.");
+    if (!geozip || !code) {
+      errorDiv.textContent = "GeoZip and Procedure Code are required.";
+      return;
     }
 
-    const data = await response.json();
+    let url = `/lookup?geozip=${encodeURIComponent(geozip)}&code=${encodeURIComponent(code)}`;
+    if (modifier) {
+      url += `&modifier=${encodeURIComponent(modifier)}`;
+    }
 
-    const row = document.getElementById("resultRow");
-    row.innerHTML = `
-  <td>${data.description || ""}</td>
-  <td>${data.match_type || ""}</td>
-  <td>${data["50th"] || ""}</td>
-  <td>${data["60th"] || ""}</td>
-  <td>${data["70th"] || ""}</td>
-  <td>${data["75th"] || ""}</td>
-  <td>${data["80th"] || ""}</td>
-  <td>${data["85th"] || ""}</td>
-  <td>${data["90th"] || ""}</td>
-  <td>${data["95th"] || ""}</td>
-`;
+    try {
+      const response = await fetch(url);
 
-    document.getElementById("results").style.display = "table";
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || "No matching record found.");
+      }
 
-  } catch (err) {
-    document.getElementById("error").textContent = err.message;
+      const data = await response.json();
+
+      document.getElementById("resultRow").innerHTML = `
+        <td>${data.description || ""}</td>
+        <td class="match-type">${data.match_type || ""}</td>
+        <td>${data["50th"] || ""}</td>
+        <td>${data["60th"] || ""}</td>
+        <td>${data["70th"] || ""}</td>
+        <td>${data["75th"] || ""}</td>
+        <td>${data["80th"] || ""}</td>
+        <td>${data["85th"] || ""}</td>
+        <td>${data["90th"] || ""}</td>
+        <td>${data["95th"] || ""}</td>
+      `;
+
+      resultsTable.style.display = "table";
+
+    } catch (err) {
+      errorDiv.textContent = err.message;
+    }
   }
-}
 </script>
 
 </body>
 </html>
+
