@@ -12,9 +12,7 @@
       color: #222;
     }
 
-    h2 {
-      margin-bottom: 6px;
-    }
+    h2 { margin-bottom: 6px; }
 
     .subtext {
       color: #555;
@@ -34,9 +32,7 @@
       margin-top: 4px;
     }
 
-    textarea {
-      resize: vertical;
-    }
+    textarea { resize: vertical; }
 
     button {
       margin-top: 24px;
@@ -82,187 +78,146 @@
 
 <body>
 
-  <h2>Fair Health Benchmark Lookup</h2>
-  <div class="subtext">
-    Enter GeoZip and paste one or more Procedure Codes below (one per line).
-    Modifier is optional and rarely required.
-    Results reflect available Fair Health benchmark data.
-  </div>
+<h2>Fair Health Benchmark Lookup</h2>
+<div class="subtext">
+  Enter GeoZip and paste one or more Procedure Codes below (one per line).
+  Modifier is optional and rarely required.
+  Results reflect available Fair Health benchmark data.
+</div>
 
-  <form id="lookupForm">
+<form id="lookupForm">
+  <label for="geozip">GeoZip</label>
+  <input id="geozip" type="number" required />
 
-    <label for="geozip">GeoZip</label>
-    <input id="geozip" type="number" required />
+  <label for="codes">Procedure Code(s) (one per line)</label>
+  <textarea id="codes" rows="5" required></textarea>
 
-    <label for="codes">
-      Procedure Code(s)
-      <span style="font-weight: normal; color: #555;">(one per line)</span>
-    </label>
-    <textarea
-      id="codes"
-      rows="5"
-      placeholder="29035&#10;10004&#10;81420"
-      required
-    ></textarea>
+  <label for="modifier">Modifier (optional)</label>
+  <input id="modifier" type="text" />
 
-    <label for="modifier">
-      Modifier <span style="font-weight: normal; color: #555;">(optional)</span>
-    </label>
-    <input id="modifier" type="text" />
+  <button type="submit">Lookup</button>
+</form>
 
-    <button type="submit">Lookup</button>
-  </form>
+<div id="error" class="error"></div>
 
-  <div id="error" class="error"></div>
+<button id="copyBtn" style="display:none; margin-top:20px;">
+  Copy Results
+</button>
 
-  <button
-    id="copyBtn"
-    style="display:none; margin-top: 20px;"
-    onclick="copyResults()"
-  >
-    Copy Results
-  </button>
-
-  <table id="results" style="display:none;">
-    <thead>
-      <tr>
-        <th>Procedure Code</th>
-        <th>Product</th>
-        <th>Description</th>
-        <th>Match Type</th>
-        <th>50th</th>
-        <th>60th</th>
-        <th>70th</th>
-        <th>75th</th>
-        <th>80th</th>
-        <th>85th</th>
-        <th>90th</th>
-        <th>95th</th>
-      </tr>
-    </thead>
-    <tbody id="resultRows"></tbody>
-  </table>
+<table id="results" style="display:none;">
+  <thead>
+    <tr>
+      <th>Procedure Code</th>
+      <th>Product</th>
+      <th>Description</th>
+      <th>Match Type</th>
+      <th>50th</th>
+      <th>60th</th>
+      <th>70th</th>
+      <th>75th</th>
+      <th>80th</th>
+      <th>85th</th>
+      <th>90th</th>
+      <th>95th</th>
+    </tr>
+  </thead>
+  <tbody id="resultRows"></tbody>
+</table>
 
 <script>
-  document.getElementById("lookupForm").addEventListener("submit", function (e) {
-    e.preventDefault();
-    lookup();
-  });
+document.getElementById("lookupForm").addEventListener("submit", e => {
+  e.preventDefault();
+  lookup();
+});
 
-  async function lookup() {
-    const errorDiv = document.getElementById("error");
-    const resultsTable = document.getElementById("results");
-    const rowsContainer = document.getElementById("resultRows");
-    const copyBtn = document.getElementById("copyBtn");
+document.getElementById("copyBtn").addEventListener("click", copyResults);
 
-    errorDiv.textContent = "";
-    resultsTable.style.display = "none";
-    copyBtn.style.display = "none";
-    rowsContainer.innerHTML = "";
+async function lookup() {
+  const errorDiv = document.getElementById("error");
+  const resultsTable = document.getElementById("results");
+  const rowsContainer = document.getElementById("resultRows");
+  const copyBtn = document.getElementById("copyBtn");
 
-    const geozip = document.getElementById("geozip").value.trim();
-    const codesRaw = document.getElementById("codes").value.trim();
-    const modifier = document.getElementById("modifier").value.trim();
+  errorDiv.textContent = "";
+  resultsTable.style.display = "none";
+  copyBtn.style.display = "none";
+  rowsContainer.innerHTML = "";
 
-    if (!geozip || !codesRaw) {
-      errorDiv.textContent = "GeoZip and at least one Procedure Code are required.";
-      return;
-    }
+  const geozip = geozipInput();
+  const codes = codeList();
+  const modifier = document.getElementById("modifier").value.trim();
 
-    const codes = codesRaw
-      .split(/\r?\n/)
-      .map(c => c.trim())
-      .filter(c => c.length > 0);
-
-    let url = `/lookup?geozip=${encodeURIComponent(geozip)}`;
-    codes.forEach(code => {
-      url += `&code=${encodeURIComponent(code)}`;
-    });
-
-    if (modifier) {
-      url += `&modifier=${encodeURIComponent(modifier)}`;
-    }
-
-    try {
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.detail || "Lookup failed.");
-      }
-
-      const results = await response.json();
-
-      results.forEach(data => {
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td class="code-cell">${data.code || ""}</td>
-          <td>${data.product || ""}</td>
-          <td>${data.description || ""}</td>
-          <td class="match-type">${data.match_type || ""}</td>
-          <td>${data["50th"] || ""}</td>
-          <td>${data["60th"] || ""}</td>
-          <td>${data["70th"] || ""}</td>
-          <td>${data["75th"] || ""}</td>
-          <td>${data["80th"] || ""}</td>
-          <td>${data["85th"] || ""}</td>
-          <td>${data["90th"] || ""}</td>
-          <td>${data["95th"] || ""}</td>
-        `;
-        rowsContainer.appendChild(row);
-      });
-
-      resultsTable.style.display = "table";
-      copyBtn.style.display = "inline-block";
-
-    } catch (err) {
-      errorDiv.textContent = err.message;
-    }
+  if (!geozip || codes.length === 0) {
+    errorDiv.textContent = "GeoZip and at least one Procedure Code are required.";
+    return;
   }
 
- <script>
+  let url = `/lookup?geozip=${encodeURIComponent(geozip)}`;
+  codes.forEach(c => url += `&code=${encodeURIComponent(c)}`);
+  if (modifier) url += `&modifier=${encodeURIComponent(modifier)}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    const err = await response.json();
+    errorDiv.textContent = err.detail || "Lookup failed.";
+    return;
+  }
+
+  const results = await response.json();
+
+  results.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="code-cell">${r.code || ""}</td>
+      <td>${r.product || ""}</td>
+      <td>${r.description || ""}</td>
+      <td class="match-type">${r.match_type || ""}</td>
+      <td>${r["50th"] || ""}</td>
+      <td>${r["60th"] || ""}</td>
+      <td>${r["70th"] || ""}</td>
+      <td>${r["75th"] || ""}</td>
+      <td>${r["80th"] || ""}</td>
+      <td>${r["85th"] || ""}</td>
+      <td>${r["90th"] || ""}</td>
+      <td>${r["95th"] || ""}</td>
+    `;
+    rowsContainer.appendChild(tr);
+  });
+
+  resultsTable.style.display = "table";
+  copyBtn.style.display = "inline-block";
+}
+
 function copyResults() {
   const table = document.getElementById("results");
   if (table.style.display === "none") return;
 
   let lines = [];
-
-  // 1. Capture headers
-  const headers = Array.from(
-    table.querySelectorAll("thead th")
-  ).map(th =>
-    th.innerText
-      .replace(/\s+/g, " ")
-      .trim()
-  );
-
+  const headers = Array.from(table.querySelectorAll("thead th"))
+    .map(th => th.innerText.trim());
   lines.push(headers.join("\t"));
 
-  // 2. Capture rows
-  const rows = table.querySelectorAll("tbody tr");
-  rows.forEach(row => {
-    const cells = Array.from(row.querySelectorAll("td")).map(td =>
-      td.innerText
-        .replace(/\r?\n|\r/g, " ")   // remove line breaks inside cells
-        .replace(/\s+/g, " ")        // normalize spacing
-        .trim()
-    );
+  table.querySelectorAll("tbody tr").forEach(row => {
+    const cells = Array.from(row.querySelectorAll("td"))
+      .map(td => td.innerText.replace(/\s+/g, " ").trim());
     lines.push(cells.join("\t"));
   });
 
-  // 3. Write to clipboard
-  const output = lines.join("\n");
+  navigator.clipboard.writeText(lines.join("\n"))
+    .then(() => alert("Results copied to clipboard."));
+}
 
-  navigator.clipboard.writeText(output)
-    .then(() => {
-      alert("Results copied to clipboard.");
-    })
-    .catch(() => {
-      alert("Unable to copy results.");
-    });
+function geozipInput() {
+  return document.getElementById("geozip").value.trim();
+}
+
+function codeList() {
+  return document.getElementById("codes").value
+    .split(/\r?\n/)
+    .map(c => c.trim())
+    .filter(Boolean);
 }
 </script>
-
 
 </body>
 </html>
