@@ -25,7 +25,7 @@
       font-weight: bold;
     }
 
-    input, textarea {
+    input, textarea, select {
       width: 340px;
       padding: 7px;
       font-size: 14px;
@@ -85,14 +85,20 @@
 
 <h2>Fair Health Benchmark Lookup</h2>
 <div class="subtext">
-  Enter GeoZip and paste one or more Procedure Codes below (one per line).
-  Modifier is optional and rarely required.
-  Results reflect available Fair Health benchmark data.
+  Enter GeoZip, select a Product, and paste one or more Procedure Codes (one per line).
+  Modifier is optional. Results reflect available Fair Health benchmark data.
 </div>
 
 <form id="lookupForm">
   <label for="geozip">GeoZip</label>
   <input id="geozip" type="number" required />
+
+  <label for="product">Product (required)</label>
+  <select id="product" required>
+    <option value="" selected disabled>Select a product...</option>
+    <option value="Allowed Medical">Allowed Medical</option>
+    <option value="Allowed Outpatient Facility">Allowed Outpatient Facility</option>
+  </select>
 
   <label for="codes">Procedure Code(s) (one per line)</label>
   <textarea id="codes" rows="5" required></textarea>
@@ -159,18 +165,19 @@ async function lookup() {
   rowsContainer.innerHTML = "";
 
   const geozip = document.getElementById("geozip").value.trim();
+  const product = document.getElementById("product").value;
   const codes = document.getElementById("codes").value
     .split(/\r?\n/)
     .map(c => c.trim())
     .filter(Boolean);
   const modifier = document.getElementById("modifier").value.trim();
 
-  if (!geozip || codes.length === 0) {
-    errorDiv.textContent = "GeoZip and at least one Procedure Code are required.";
+  if (!geozip || !product || codes.length === 0) {
+    errorDiv.textContent = "GeoZip, Product, and at least one Procedure Code are required.";
     return;
   }
 
-  let url = `/lookup?geozip=${encodeURIComponent(geozip)}`;
+  let url = `/lookup?geozip=${encodeURIComponent(geozip)}&product=${encodeURIComponent(product)}`;
   codes.forEach(c => url += `&code=${encodeURIComponent(c)}`);
   if (modifier) url += `&modifier=${encodeURIComponent(modifier)}`;
 
@@ -217,9 +224,7 @@ async function lookup() {
   totalRow.className = "total-row";
   totalRow.innerHTML = `
     <td>Total (reference only)</td>
-    <td></td>
-    <td></td>
-    <td></td>
+    <td></td><td></td><td></td>
     <td>${totals["50th"].toFixed(2)}</td>
     <td>${totals["60th"].toFixed(2)}</td>
     <td>${totals["70th"].toFixed(2)}</td>
@@ -246,7 +251,7 @@ function copyResults() {
 
   table.querySelectorAll("tbody tr").forEach(row => {
     const cells = Array.from(row.querySelectorAll("td"))
-      .map(td => `"${td.innerText.replace(/\s+/g, " ").trim()}"`);
+      .map(td => `"${td.innerText.replace(/\s+/g, " ").trim().replace(/"/g, '""')}"`);
     lines.push(cells.join(","));
   });
 
